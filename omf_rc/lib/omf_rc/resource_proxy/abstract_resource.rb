@@ -58,7 +58,8 @@ class OmfRc::ResourceProxy::AbstractResource
 
     # Generic pubsub event
     @comm.pubsub_event do |e|
-      logger.debug "PUBSUB GENERIC EVENT: #{e}"
+      puts "PUBSUB GENERIC EVENT: #{e}"
+      #logger.debug "PUBSUB GENERIC EVENT: #{e}"
     end
   end
 

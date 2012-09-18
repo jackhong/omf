@@ -26,33 +26,30 @@
 #
 #
 module OmfRc::ResourceProxy::GenericApplication
-  include OmfRc::ResourceProxyDSL 
+  include OmfRc::ResourceProxyDSL
   require 'omf_common/exec_app'
 
-  register_proxy :generic_application
+  register_proxy :generic_application, :create_by => :node
+
   utility :platform_tools
   utility :common_tools
 
+  property *%w(binary_path pkg_tarball pkg_ubuntu pkg_fedora state installed force_tarball_install map_err_to_out tarball_install_path)
+
   hook :before_ready do |res|
-    res.property.app_id ||= nil 
-    res.property.binary_path ||= nil 
-    res.property.platform ||= nil 
-    res.property.pkg_tarball ||= nil 
-    res.property.tarball_install_path ||= '/' 
-    res.property.force_tarball_install ||= false
-    res.property.pkg_ubuntu ||= nil 
-    res.property.pkg_fedora ||= nil 
-    res.property.state ||= :stop 
-    res.property.installed ||= false 
-    res.property.map_err_to_out ||= false 
-    res.property.event_sequence ||= 0 
+    res.tarball_install_path ||= '/'
+    res.force_tarball_install ||= false
+    res.state ||= :stop
+    res.installed ||= false
+    res.map_err_to_out ||= false
+    res.event_sequence ||= 0
     define_method("on_app_event") { |*args| process_event(self, *args) }
   end
 
   # This method processes an event coming from the application instance, which
   # was started by this Resource Proxy (RP). It is a callback, which is usually
   # called by the ExecApp class in OMF
-  # 
+  #
   # @param [AbstractResource] res this RP
   # @param [String] event_type the type of event from the app instance
   #                 (STARTED, DONE.OK, DONE.ERROR, STDOUT, STDERR)
@@ -80,16 +77,16 @@ module OmfRc::ResourceProxy::GenericApplication
   # properties are:
   #
   # @param [String] binary_path the path to the binary of this app
-  # @param [String] pkg_tarball the URI of the installation tarball of this app 
+  # @param [String] pkg_tarball the URI of the installation tarball of this app
   # @param [String] pkg_ubuntu the name of the Ubuntu package for this app
   # @param [String] pkg_fedora the name of the Fedora package for this app
-  # @param [String] state the state of this Application RP 
+  # @param [String] state the state of this Application RP
   #                 (stop, start, pause, install)
   # @param [Boolean] installed is this application installed? (true/false)
-  # @param [Boolean] force_tarball_install if true then force the installation 
-  #                  from tarball even if other distribution-specific 
+  # @param [Boolean] force_tarball_install if true then force the installation
+  #                  from tarball even if other distribution-specific
   #                  installation are available (default = false)
-  # @param [Boolean] map_err_to_out if true then map StdErr to StdOut for this 
+  # @param [Boolean] map_err_to_out if true then map StdErr to StdOut for this
   #                  app (default = false)
   # @param [Symbol] platform the OS platform where this app is running
   #
@@ -97,14 +94,14 @@ module OmfRc::ResourceProxy::GenericApplication
     force_tarball_install map_err_to_out tarball_install_path).each do |prop|
     request(prop) { |res| res.property[prop].to_s }
   end
-  
+
   # Request the platform properties of this Generic Application RP
   #
   # @see OmfRc::ResourceProxy::GenericApplication
   #
   request :platform do |res|
-    res.property.platform = detect_platform if res.property.platform.nil?
-    res.property.platform.to_s
+    res.platform ||= detect_platform
+    res.platform.to_s
   end
 
   # Configure the basic properties of this Generic Application RP
@@ -118,29 +115,29 @@ module OmfRc::ResourceProxy::GenericApplication
 
   # Configure the state of this Generic Application RP. The valid states are
   # stop, run, pause, install. The semantic of each states are:
-  # - stop: the initial state for an Application RP, and the final state for 
-  #         an applicaiton RP, for which the application instance finished 
+  # - stop: the initial state for an Application RP, and the final state for
+  #         an applicaiton RP, for which the application instance finished
   #         its execution or its installation
-  # - run: upon entering in this state, a new instance of the application is 
+  # - run: upon entering in this state, a new instance of the application is
   #        started, the Application RP stays in this state until the
   #        application instance is finished or paused. The Application RP can
   #        only enter this state from a previous 'pause' or 'stop' state.
   # - pause: upon entering this state, the currently running instance of this
-  #          application should be paused (it is the responsibility of 
+  #          application should be paused (it is the responsibility of
   #          specialised Application Proxy to ensure that! The default Generic
   #          Application Proxy does nothing to the application instance when
-  #          entering this state). The Application RP can only enter this 
+  #          entering this state). The Application RP can only enter this
   #          state from a previous 'run' state.
   # - install: upon entering in this state, a new installation of the
   #            application will be performed by the Application RP, which will
-  #            stay in this state until the installation is finished. The 
+  #            stay in this state until the installation is finished. The
   #            Application RP can only enter this state from a previous 'stop'
   #            state, and can only enter a 'stop' state once the installation
   #            is finished.
   #            Supported install methods are: Tarball, Ubuntu, and Fedora
-  # 
+  #
   # @yieldparam [String] value the state to set this app into
-  #  
+  #
   configure :state do |res, value|
     case value.to_s.downcase.to_sym
     when :install then res.switch_to_install
@@ -162,19 +159,19 @@ module OmfRc::ResourceProxy::GenericApplication
           # Select the proper installation method based on the platform
           # and the value of 'force_tarball_install'
           res.property.state = :install
-          if res.property.force_tarball_install || 
+          if res.property.force_tarball_install ||
            (res.property.platform == :unknown)
-           installing = res.install_tarball(res.property.pkg_tarball, 
+           installing = res.install_tarball(res.property.pkg_tarball,
             res.property.tarball_install_path)
-         elsif res.property.platform == :ubuntu 
+         elsif res.property.platform == :ubuntu
           installing = res.install_ubuntu(res.property.pkg_ubuntu)
-        elsif res.property.platform == :fedora 
+        elsif res.property.platform == :fedora
           installing = res.install_fedora(res.property.pkg_fedora)
         end
         res.property.state = :stop unless installing
       end
     else
-      # cannot install as we are not stopped 
+      # cannot install as we are not stopped
       res.log_inform_warn "Not in STOP state. Cannot switch to INSTALL state!"
     end
   end
@@ -211,13 +208,13 @@ module OmfRc::ResourceProxy::GenericApplication
   # (see the description of configure :state)
   #
   work('switch_to_run') do |res|
-    if res.property.state == :stop 
-      # start a new instance of this app 
-      res.property.app_id = res.hrn.nil? ? res.uid : res.hrn 
-      ExecApp.new(res.property.app_id, res, 
-                  res.property.binary_path, 
+    if res.property.state == :stop
+      # start a new instance of this app
+      res.property.app_id = res.hrn.nil? ? res.uid : res.hrn
+      ExecApp.new(res.property.app_id, res,
+                  res.property.binary_path,
                   res.property.map_err_to_out)
-                  res.property.state = :run 
+                  res.property.state = :run
     elsif res.property.state == :pause
       # resume this paused app
       res.property.state = :run
@@ -232,7 +229,7 @@ module OmfRc::ResourceProxy::GenericApplication
   # (see the description of configure :state)
   #
   work('switch_to_pause') do |res|
-    if res.property.state == :run 
+    if res.property.state == :run
       # pause this app
       res.property.state = :pause
       # do more things here...
