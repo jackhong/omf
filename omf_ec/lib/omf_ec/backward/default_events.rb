@@ -11,7 +11,7 @@ module OmfEc
         def included(base)
           base.instance_eval do
 
-            def_event :ALL_NODES_UP do |state|
+            def all_nodes_up?(state)
               all_groups? do |g|
                 plan = g.members.values.uniq.sort
                 actual = state.find_all { |v| v.joined?(g.address) }.map { |v| v[:address].to_s }.sort
@@ -27,7 +27,7 @@ module OmfEc
               end
             end
 
-            on_event :ALL_NODES_UP do
+            def all_nodes_up_cbk
               all_groups do |group|
                 # Deal with brilliant net.w0.ip syntax...
                 group.net_ifs && group.net_ifs.each do |nif|
@@ -53,7 +53,24 @@ module OmfEc
               end
             end
 
+            def_event :ALL_NODES_UP do |state|
+              all_nodes_up?(state)
+            end
+
+            on_event :ALL_NODES_UP do
+              all_nodes_up_cbk
+            end
+
             def_event :ALL_UP do |state|
+              all_nodes_up?(state)
+            end
+
+            on_event :ALL_UP do
+              all_nodes_up_cbk
+            end
+
+            def_event :ALL_RESOURCE_UP do |state|
+              all_nodes_up?(state) && 
               all_groups? do |g|
                 app_plan = g.app_contexts.size * g.members.values.uniq.size
                 app_actual = state.count { |v| v.joined?(g.address("application")) }
